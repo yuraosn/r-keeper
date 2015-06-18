@@ -1,0 +1,11 @@
+name = Синхронизация R-keeper
+description = Синхронизация данных R-keeper`a и товаров магазина
+package = Commerce (R-keeper)
+core = 7.x
+
+configure = admin/commerce/config/r-keeper
+
+dependencies[] = commerce_rkeeper
+
+; Views handlers
+files[] = includes/views/sync_rkeeper.views_default.inc

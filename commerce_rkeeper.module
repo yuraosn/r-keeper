@@ -1,0 +1,176 @@
+<?php
+
+/**
+ * @file commerce_rkeeper.module
+ */
+
+/**
+ *  Implements hook_menu().
+ */
+function commerce_rkeeper_menu() {
+  $items = array();
+
+  $items['admin/commerce/config/r-keeper'] = array(
+    'title' => 'Настройка R-keeper',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_rkeeper_settings_form'),
+    'access arguments' => array('administer r-keeper'),
+    'file' => 'commerce_rkeeper_settings_ui.inc',
+    'file path' => drupal_get_path('module', 'commerce_rkeeper') . '/includes',
+  );
+
+  $items['admin/commerce/config/r-keeper/settings'] = array(
+    'title' => 'Настройка R-keeper',
+    'access arguments' => array('administer r-keeper'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  $items['commerce'] = array(
+    'title' => 'Тест R-keeper',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('test_commerce'),
+    'access arguments' => array('administer r-keeper'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ *  Implements hook_permission().
+ */
+function commerce_rkeeper_permission() {
+  return array(
+    'administer r-keeper' =>  array(
+      'title' => t('Настройка R-keeper'),
+      'description' => t('Пользователи этих прав могут менять настройки R-keeper'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ *  Implements hook_cron().
+ */
+function commerce_rkeeper_cron() {
+  $variables = variable_get('commerce_rkeeper_settings');
+  if (isset($variables['commerce_rkeeper_time'])) {
+    $commerce_rkeeper_time = $variables['commerce_rkeeper_time']['time'];
+
+    if (!isset($variables['commerce_rkeeper_time']['last_time'])) {
+      $commerce_rkeeper_last_time = $variables['commerce_rkeeper_time']['last_time'] = REQUEST_TIME;
+      variable_set('commerce_rkeeper_settings', $variables);
+
+    } else {
+      $commerce_rkeeper_last_time = $variables['commerce_rkeeper_time']['last_time'];
+    }
+
+    $commerce_rkeeper_time_difference = time() - $commerce_rkeeper_time;
+    if ($commerce_rkeeper_last_time <= $commerce_rkeeper_time_difference) {
+      $queue = DrupalQueue::get('commerce_rkeeper');
+      $queue->createItem('commerce_rkeeper');
+    }
+  }
+}
+
+/**
+ * Определяем свое правило cron hook_cron_queue_info()
+ */
+function commerce_rkeeper_cron_queue_info() {
+  $queues['commerce_rkeeper'] = array(
+    'worker callback' => '_commerce_rkeeper_cron_run',
+    'time' => 5,
+  );
+  return $queues;
+}
+
+/*
+ * Запуск функций при запуске крона
+ */
+function _commerce_rkeeper_cron_run() {
+  drupal_set_message('Обновление товара rkeeper ЗАПУЩЕН!!!');
+  module_load_include('inc', 'sync_rkeeper', 'sync_rkeeper/includes/sync_rkeeper_connect_query');
+  // Обновляем товары и столики заведения
+  sync_rkeeper_comparison_product();
+}
+
+/**
+ *  Implements hook_form_alter().
+ */
+function commerce_rkeeper_form_alter(&$form, &$form_state, $form_id) {
+//  Перевести Order total
+  if (isset($form['cart_contents'])){
+    $form['cart_contents']['cart_contents_view']['#markup'] = str_replace('Order total', t('Сумма заказа'),
+      $form['cart_contents']['cart_contents_view']['#markup']);
+  }
+
+//  Перевести Order total
+  if (isset($form['checkout_review']['review']['#data']['cart_contents'])){
+    $form['checkout_review']['review']['#data']['cart_contents']['data'] = str_replace('Order total', t('Сумма заказа'), $form['checkout_review']['review']['#data']['cart_contents']['data']);
+  }
+
+//  Перевести commerce_coupon
+  if (isset($form['commerce_coupon'])){
+    $form['commerce_coupon']['#title'] = t('Скидочные карты');
+    $form['commerce_coupon']['coupon_code']['#title'] = t('Код карты');
+    $form['commerce_coupon']['coupon_code']['#description'] = t('Можете добавить здесь свою карту');
+    $form['commerce_coupon']['coupon_add']['#value'] = t('Добавить карту');
+  }
+
+//  Перевести customer_profile_billing
+  if (isset($form['customer_profile_billing'])){
+    $form['customer_profile_billing']['#title'] = t('Информация о пользователе');
+  }
+
+//  Перевести customer_profile_billing
+  if (isset($form['checkout_review']['review']['#data']['customer_profile_billing'])){
+    $form['checkout_review']['review']['#data']['customer_profile_billing']['title'] = t('Пользовательские данные заказа');
+  }
+
+//  Перевод формы создания скидочной карты
+  if ($form_id == 'commerce_coupon_form') {
+    $form['commerce_coupon_number_of_uses'][LANGUAGE_NONE][0]['value']['#title'] = t('Максимальное количество для использования');
+    $form['commerce_coupon_number_of_uses'][LANGUAGE_NONE][0]['value']['#description'] = t('Максимальное количество раз использования кода, после чего он станет неактивным');
+    $form['commerce_coupon_code'][LANGUAGE_NONE][0]['value']['#title'] = t('Код карты');
+    $form['commerce_coupon_percent_amount'][LANGUAGE_NONE][0]['value']['#title'] = t('Процент скидки');
+    $form['commerce_coupon_fixed_amount'][LANGUAGE_NONE][0]['currency_code']['#options'] = array('RUB');
+    $form['commerce_coupon_fixed_amount'][LANGUAGE_NONE][0]['currency_code']['#description'] = t('Введите для карты сумму скидки в рублях');
+    $form['commerce_coupon_fixed_amount'][LANGUAGE_NONE][0]['amount']['#title'] = t('Сумма скидки');
+    $form['is_active']['#description'] = t('Включить купон для использования');
+  }
+}
+
+/**
+ * implements hook_form_commerce_checkout_form_review_alter()
+ */
+function commerce_rkeeper_form_commerce_checkout_form_review_alter(&$form, &$form_state) {
+  $header = array(
+    'payment' => t('Payment'),
+    'description' => t('Description'),
+  );
+
+  $checkout_pane = commerce_checkout_pane_load('commerce_payment');
+  foreach ($form['commerce_payment']['payment_method']['#options'] as $key => $option) {
+    $method_info = $form['commerce_payment']['payment_methods']['#value'][$key];
+    $payment_method = commerce_payment_method_load($method_info['method_id']);
+    $payment_method['settings'] = $method_info['settings'];
+
+    $description = '';
+    if ($callback = commerce_payment_method_callback($payment_method, 'submit_form')) {
+      $description = $callback($payment_method, array(), $checkout_pane, $form_state['order']);
+    }
+
+    $options[$key] = array();
+    $options[$key]['payment'] = $option;
+    $options[$key]['description'] = render($description);
+  }
+
+  // Change a standart widget to a table select widget to specify the payment method.
+  $form['commerce_payment']['payment_method']['#type'] = 'tableselect';
+  $form['commerce_payment']['payment_method']['#header'] = $header;
+  $form['commerce_payment']['payment_method']['#options'] = $options;
+  $form['commerce_payment']['payment_method']['#empty'] = t('No payment methods available.');
+  $form['commerce_payment']['payment_method']['#multiple'] = FALSE;
+
+  $form['commerce_payment']['payment_details']['#access'] = FALSE;
+}

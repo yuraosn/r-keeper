@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RK7QueryResult ServerVersion="7.5.2.289" XmlVersion="104" Status="Ok" Processed="1">
+    <RIChildItems>
+        <Code>1</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>2</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>3</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>9</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>12</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>14</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>15</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>16</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>17</Code>
+    </RIChildItems>
+    <RIChildItems>
+        <Code>18</Code>
+    </RIChildItems>
+</RK7QueryResult>

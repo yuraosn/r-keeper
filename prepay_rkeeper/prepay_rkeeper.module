@@ -1,0 +1,235 @@
+<?php
+/**
+ * @file prepay_rkeeper.module
+ */
+
+/**
+ *  Implements hook_permission().
+ */
+function prepay_rkeeper_permission() {
+  return array(
+    'prepay r-keeper' =>  array(
+      'title' => t('Предоплата R-keeper'),
+      'description' => t('Пользователи могут делать предоплату на заказ Токио'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_commerce_line_item_type_info().
+ */
+function prepay_rkeeper_commerce_line_item_type_info() {
+  $line_item_types['prepay_line_item'] = array(
+    'name' => t('Предоплата'),
+    'description' => t('Добавляем предоплату'),
+    'product' => FALSE,
+    'add_form_submit_value' => t('Add prepay'),
+    'callbacks' => array(
+      'configuration' => 'prepay_rkeeper_configuration',
+      'title' => 'prepay_rkeeper_title',
+      'add_form' => 'prepay_rkeeper_add_form',
+      'add_form_submit' => 'prepay_rkeeper_add_form_submit',
+    ),
+  );
+
+  return $line_item_types;
+}
+
+/**
+ * Implements hook_commerce_price_component_type_info().
+ */
+function prepay_rkeeper_commerce_price_component_type_info() {
+  return array(
+    'price_prepay' => array(
+      'title' => t('Предоплата'),
+      'display_title' => t('Оставшаяся сумма от предоалаты'),
+      'weight' => 10,
+    ),
+  );
+}
+
+/**
+ * Implements hook_commerce_checkout_pane_info().
+ */
+function prepay_rkeeper_commerce_checkout_pane_info() {
+  $panes = array();
+  $panes['prepay_rkeeper_pane'] = array(
+    'title' => t('Панель предоплаты'),
+    'base' => 'prepay_rkeeper_pane',
+    'page' => 'checkout',
+    'weight' => 50,
+    'file' => 'includes/pane.inc',
+  );
+
+  return $panes;
+}
+
+/**
+ * Configure the line item with additional fields or whatever.
+ */
+function prepay_rkeeper_configuration($line_item_type) {
+  $type = $line_item_type['type'];
+
+  // Here we could add fields or other configuration.
+}
+
+/**
+ * Returns a title for this line item.
+ */
+function prepay_rkeeper_title($line_item) {
+  return(t('Добавить предоплату'));
+}
+
+/**
+ * Returns the elements necessary to add a product line item through a line item
+ * manager widget (on the order form).
+ */
+function prepay_rkeeper_add_form($element, &$form_state) {
+  $form = array();
+
+  return $form;
+}
+
+/**
+ * Используется про создании заказа через админ панель. Создание line_item и component
+ */
+function prepay_rkeeper_add_form_submit(&$line_item, $element, &$form_state, $form) {
+  $line_item->line_item_label = t('Предоплата');
+
+  // Wrap the line item and product to easily set field information.
+  $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+  // Provide a default price.
+  $amount = 0;
+  $currency_code = 'RUB';
+
+  $line_item->commerce_unit_price = array('und' => array(
+    '0' => array('amount' => $amount, 'currency_code' => $currency_code)
+  ));
+
+  if (!is_null($line_item_wrapper->commerce_unit_price->value())) {
+    // Add the base price to the components array.
+    if (!commerce_price_component_load($line_item_wrapper->commerce_unit_price->value(), 'base_price')) {
+      $line_item_wrapper->commerce_unit_price->data = commerce_price_component_add(
+        $line_item_wrapper->commerce_unit_price->value(),
+        'base_price',
+        $line_item_wrapper->commerce_unit_price->value(),
+        TRUE
+      );
+    }
+  }
+}
+
+/*
+ * Если установлена предоплата - удаляем оплата в заведении.
+ */
+function prepay_rkeeper_commerce_checkout_router($order, $checkout_page) {
+  if ($checkout_page['page_id'] == 'review') {
+    $payment = array(
+      'id' => 'pay_tokio',
+      'title' => 'Оплата на месте',
+      'status' => 1,
+      'description' => 'Оплата при прибытии в суши бар',
+    );
+    if (isset($order->data['prepay']['amount']) && isset($order->data['prepay']['amount']) > 0) {
+      commerce_cop_payment_delete($payment);
+
+    } else {
+      commerce_cop_payment_save($payment);
+    }
+  }
+}
+
+/**
+ * Создаем новую line_item
+ */
+function prepay_rkeeper_new($order) {
+  $type_line_item = 'prepay_line_item';
+  $price_component_name = 'price_prepay';
+
+  $amount = isset($order->data['prepay']['amount'])? $order->data['prepay']['amount']: 0;
+  $currency_code = commerce_default_currency();
+
+  // Create the new line item.
+  $line_item = entity_create('commerce_line_item', array(
+    'type' => $type_line_item,
+    'order_id' => $order->order_id,
+    'quantity' => 1,
+  ));
+
+  $line_item->commerce_unit_price = array(
+    'und' => array(
+      '0' => array(
+        'amount' => $amount,
+        'currency_code' => $currency_code,
+      ),
+    ),
+  );
+
+  $line_item->line_item_label = 'Предоплата';
+  $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+  if (!commerce_price_component_load($line_item_wrapper->commerce_unit_price->value(), $price_component_name)) {
+    $line_item_wrapper->commerce_unit_price->amount = $amount * -1;
+    $line_item_wrapper->commerce_unit_price->data = commerce_price_component_add(
+      $line_item_wrapper->commerce_unit_price->value(), $price_component_name, $line_item_wrapper->commerce_unit_price->value(), TRUE, FALSE
+    );
+  }
+
+  return $line_item;
+}
+
+/*
+ * Добавление price_component и line_item в заказ или изменяем, перед сохранением order.
+ */
+function prepay_rkeeper_commerce_cart_line_item_refresh($line_item, $order_wrapper) {
+  $order = $order_wrapper->value();
+
+  $prepay_rkeeper_new = (variable_get('prepay_rkeeper_new_order_id', FALSE) == $order->order_id)? TRUE: FALSE;
+
+  if (!$prepay_rkeeper_new) {
+    $line_item = prepay_rkeeper_new($order);
+    commerce_line_item_save($line_item);
+    $order->commerce_line_items['und'][] = array('line_item_id' => $line_item->line_item_id);
+    commerce_order_save($order);
+    variable_set('prepay_rkeeper_new_order_id', $order->order_id);
+
+  } else {
+    if ($line_item->type == 'prepay_line_item') {
+      $price_component_name = 'price_prepay';
+
+//      Считаем сумму всех карт скидок
+      $total = 0;
+      $base_price = $order->commerce_order_total['und'][0]['data']['components'][0]['price']['amount'];
+      $components = $order->commerce_order_total['und'][0]['data']['components'];
+      foreach ($components as $key => $vall) {
+        if ($vall['name'] != $price_component_name && $vall['name'] != 'base_price') {
+          $total += $vall['price']['amount'];
+        }
+      }
+
+//      Получаем от пользователя сумму предоплаты
+      $prepay = isset($order->data['prepay']['amount']) ? $order->data['prepay']['amount'] : 0;
+
+//      Высчитываем ставшуюся сумму для оплаты в заведении
+      $order_amount_total = $base_price + $total;
+      variable_set('order_amount_total', $order_amount_total);
+      if ($prepay > 0) {
+        $amount = $order_amount_total - $prepay;
+      } else {
+        $amount = 0;
+      }
+
+      $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+//      Обновляем существующую сумму компонента.
+      $line_item_wrapper->commerce_unit_price->data = commerce_price_component_delete($line_item_wrapper->commerce_unit_price->value(), $price_component_name);
+      if (!commerce_price_component_load($line_item_wrapper->commerce_unit_price->value(), $price_component_name)) {
+        $line_item_wrapper->commerce_unit_price->amount = $amount * -1;
+        $line_item_wrapper->commerce_unit_price->data = commerce_price_component_add(
+          $line_item_wrapper->commerce_unit_price->value(), $price_component_name, $line_item_wrapper->commerce_unit_price->value(), TRUE, FALSE
+        );
+      }
+    }
+  }
+}
+

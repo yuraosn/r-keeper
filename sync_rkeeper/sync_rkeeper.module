@@ -1,0 +1,116 @@
+<?php
+/**
+ * @file sync_rkeeper.module
+ */
+
+// Источник запросов (от кого пришла, integer)
+define('RKEEPER_SOURCE', 'site_shop');
+
+// Машинное имя словаря
+define('RKEEPER_VOCABULARY_NAME', 'menu');
+
+// Машинное имя типа ноды
+define('RKEEPER_NODE_TYPE', 'product');
+
+module_load_include('inc', 'sync_rkeeper', 'includes/sync_rkeeper_connect_query');
+
+/**
+ *  Implements hook_menu().
+ */
+function sync_rkeeper_menu() {
+  $items = array();
+
+  $items['admin/commerce/config/r-keeper/product'] = array(
+    'title' => 'Импорт блюда',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sync_rkeeper_product_form'),
+    'access arguments' => array('administer r-keeper'),
+    'file' => 'sync_rkeeper_product_ui.inc',
+    'file path' => drupal_get_path('module', 'sync_rkeeper') . '/includes',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+  );
+
+  $items['admin/commerce/config/r-keeper/test'] = array(
+    'title' => 'Тестовая',
+    'page callback' => array('sync_rkeeper_test'),
+    'access arguments' => array('administer r-keeper'),
+    'file' => 'sync_rkeeper_connect_query.inc',
+    'file path' => drupal_get_path('module', 'sync_rkeeper') . '/includes',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2,
+  );
+
+  return $items;
+}
+
+/**
+ * Выполнение действий после удачного подтвержения проверки или оплаты заказа
+ *
+ * @param $order
+ *   Сделаный заказ
+ */
+function sync_rkeeper_commerce_checkout_complete($order) {
+  $entity_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $billing = $entity_wrapper->commerce_customer_billing;
+  $commerce_line_items = $entity_wrapper->commerce_line_items;
+
+  // Добавляем резервацию стола
+  $data = array(
+    // ID стола (если не задан, используется HallID + TableName)
+    'tableid' => $order->data['tables_id'],
+    // ID плана зала
+    'hallid' => $billing->rk_hall->raw(),
+    // Кол-во гостей
+    'guestscount' => $billing->field_rk_guestscount->value(),
+    // Дата брони (YYYYMMDD или dd.mm.yyyy)
+    'reservdate' => date('d.m.Y', $billing->field_rk_date->raw()),
+    // Время брони (hh:mm)
+    'reservtime' => date('H:i', $billing->field_rk_date->raw()),
+    // Имя клиента
+    'clientname' => $billing->field_rk_fio->value(),
+    // Комментарий
+    'comment' => $billing->field_note->value(),
+  );
+  $orderident = sync_rkeeper_query_addreservation($data);
+
+  $dish = array();
+  foreach ($commerce_line_items as $key => $vall) {
+    if (isset($vall->value()->commerce_product)) {
+      $code_product = $vall->value()->commerce_product['und'][0]['product_id'];
+
+      $code = db_select('field_data_rk_code', 'f')
+        ->fields('f', array('rk_code_value'))
+        ->condition('entity_id', $code_product, '=')
+        ->execute()
+        ->fetchAssoc();
+
+      // Блюдо, refitem + unbounded
+      $dish[$code['rk_code_value']]['code'] = $code['rk_code_value'];
+      // ! Целое количество в тысячных долях
+      $dish[$code['rk_code_value']]['quantity'] = round($vall->quantity->value());
+    }
+  }
+
+  $cardcode = isset($entity_wrapper->value()->commerce_coupon_order_reference['und'][0]['target_id'])? $entity_wrapper->value()->commerce_coupon_order_reference['und'][0]['target_id']: '';
+  $amount = isset($entity_wrapper->value()->data['prepay']['amount'])? $entity_wrapper->value()->data['prepay']['amount']: '';
+  // Прикрепляем заказ к резервации
+  $data = array(
+    // ! ID заказа
+    'orderident' => $orderident,
+    // ! Время, к которому блюда должны быть готовы, datetime
+    'remindtime' => $data['reservtime'],
+
+    'dish' => $dish,
+    // ! Сумма предоплаты (в копейках), integer
+    'amount' => $amount,
+    // Причина, на которую сделана предоплата, refitem
+    'reason' => 'Предоплата с сайта',
+    // Код карточки, string для скидки
+    'cardcode' => $cardcode,
+  );
+
+  drupal_set_message('Заказ успешно выполнен!!!');
+
+  return sync_rkeeper_query_saveorder($data);
+}

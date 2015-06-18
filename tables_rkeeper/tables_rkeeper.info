@@ -1,0 +1,11 @@
+name = Столики для Суши-бара
+description = Добавлем страницу для выбора столиков Суши-бара
+package = Commerce (R-keeper)
+dependencies[] = commerce_rkeeper
+core = 7.x
+
+; Stylesheets
+stylesheets[all][] = css/style.css
+
+; Views handlers
+files[] = includes/views/tables_rkeeper.views_default.inc

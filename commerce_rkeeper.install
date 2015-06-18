@@ -1,0 +1,21 @@
+<?php
+/**
+ * @file commerce_rkeeper.install
+ */
+
+/**
+ * Implements hook_install().
+ */
+function commerce_rkeeper_install() {
+  variable_set('commerce_enabled_currencies', array('RUB' => 'RUB'));
+  variable_set('commerce_default_currency', 'RUB');
+  variable_set('pathauto_transliterate', 1);
+  variable_set('commerce_rkeeper_settings', FALSE);
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function commerce_rkeeper_uninstall() {
+  variable_del('commerce_rkeeper_settings');
+}

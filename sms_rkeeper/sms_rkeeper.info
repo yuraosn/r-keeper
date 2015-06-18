@@ -1,0 +1,7 @@
+name = СМС оповещение
+description = Оповещает клиентов о заказах.
+package = Commerce (R-keeper)
+dependencies[] = sync_rkeeper
+core = 7.x
+
+dependencies[] = commerce_rkeeper

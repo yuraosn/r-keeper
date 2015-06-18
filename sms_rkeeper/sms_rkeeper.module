@@ -1,0 +1,72 @@
+<?php
+/**
+ * @file sms_rkeeper.module
+ */
+
+/**
+ *  Implements hook_menu().
+ */
+function sms_rkeeper_menu() {
+  $items = array();
+
+  $items['admin/commerce/config/r-keeper/sms'] = array(
+    'title' => 'СМС',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sms_rkeeper_settings_form'),
+    'access arguments' => array('administer r-keeper'),
+    'file' => 'sms_rkeeper_settings_ui.php.inc',
+    'file path' => drupal_get_path('module', 'sms_rkeeper') . '/includes',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+  );
+
+  return $items;
+}
+
+/**
+ *  Implements hook_commerce_checkout_complete().
+ */
+function sms_rkeeper_commerce_checkout_complete($order) {
+  $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $order->commerce_customer_billing['und'][0]['profile_id']);
+  $phones_data = $profile_wrapper->field_rk_phone->value();
+  $phones = (!empty($phones_data) && $phones_data != '+7')? $phones_data: FALSE;
+  $phone_site = variable_get('sms_rkeeper_settings', FALSE);
+
+// Отправляем сообщение если в настройках активно
+  if (variable_get('sms_rkeeper_active', FALSE)) {
+//    Если баланс менее 5р
+    if ($money = sms_rkeeper_sms('balans') > 0) {
+      if ($money < 5) {
+        $message = 'На сайте ТОКИО закончились деньги на отправку СМС';
+        sms_rkeeper_sms('send', $phone_site['phone'], $message);
+      }
+
+      if ($phones) {
+        $message = 'Ваш заказ номер №' . $order->order_id;
+        sms_rkeeper_sms('send', $phones, $message);
+        drupal_set_message('Оправленно СМС с текстом: ' . $message);
+      }
+    }
+  }
+}
+
+/*
+ * Команды СМС
+ */
+function sms_rkeeper_sms($command, $phones = FALSE, $message = FALSE) {
+  module_load_include('inc', 'sms_rkeeper', 'includes/smsc_api.php');
+
+  switch($command){
+    case 'send':
+      $output = send_sms($phones, $message);
+      break;
+
+    case 'balans':
+      $output = get_balance();
+      break;
+  }
+
+  return $output;
+}
+
+

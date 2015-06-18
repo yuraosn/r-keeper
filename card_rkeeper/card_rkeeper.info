@@ -1,0 +1,6 @@
+name = Скидочные карты посетителей Токио
+description = Предоставляет возможность прикреплять скидочную карту к заказам.
+package = Commerce (R-keeper)
+core = 7.x
+
+dependencies[] = commerce_rkeeper

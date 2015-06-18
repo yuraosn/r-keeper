@@ -1,0 +1,6 @@
+name = Предоплата заказа
+description = Предоставляет пользователям делать предоплату на заказ.
+package = Commerce (R-keeper)
+core = 7.x
+
+dependencies[] = commerce_rkeeper

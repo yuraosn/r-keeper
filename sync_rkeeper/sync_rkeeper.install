@@ -1,0 +1,380 @@
+<?php
+/**
+ * @file sync_rkeeper.install
+ */
+
+
+/**
+ * Implements hook_uninstall().
+ */
+function sync_rkeeper_uninstall() {
+  $variables = array(
+    'commerce_sync_rkeeper',
+    'sync_rkeeper_settings_sync',
+    'commerce_amount_total_line_item',
+  );
+  foreach ($variables as $variable) {
+    variable_del($variable);
+  }
+
+//  Удаляем все заказы для удаления продуктов
+  $rez = commerce_order_load_multiple(FALSE);
+  commerce_order_delete_multiple(array_keys($rez));
+
+//  Удаляем все продукты rkeeper
+  $prod_id = commerce_product_load_multiple(FALSE, array('type' => array('tables', 'menuitems')));
+  commerce_product_delete_multiple(array_keys($prod_id));
+
+//  Удаляем все типы продуктов rkeeper
+  commerce_product_ui_product_type_delete('menuitems');
+  commerce_product_ui_product_type_delete('tables');
+
+  field_delete_field('rk_status');
+  field_delete_field('rk_image');
+  field_delete_field('rk_code');
+  field_delete_field('rk_portion_name');
+  field_delete_field('rk_portion_weight');
+  field_delete_field('rk_maxguests');
+  field_delete_field('rk_hall');
+  field_delete_field('rk_product');
+  field_delete_field('rk_kategori');
+  field_delete_field('rk_card');
+  $voc = taxonomy_vocabulary_machine_name_load(RKEEPER_VOCABULARY_NAME);
+  taxonomy_vocabulary_delete($voc->vid);
+
+  //Получаем массив инстанций полей, принадлежащих тому, к кому они были прикреплены.
+  $ins = field_info_instances('node', RKEEPER_NODE_TYPE);
+  //Удаляем инстанции полей перечисленные в массиве.
+  foreach ($ins as $n => $i) {
+    field_delete_instance($n);//здесь $n это имя инстанции
+  }
+
+  $nids = db_select('node', 'n')
+    ->fields('n', array('nid'))
+    ->condition('n.type', RKEEPER_NODE_TYPE)
+    ->execute()
+    ->fetchCol();
+  foreach ($nids as $nid) {
+    node_delete($nid);
+  }
+  node_type_delete(RKEEPER_NODE_TYPE);
+}
+
+/**
+ * Implements hook_install().
+ */
+function sync_rkeeper_install() {
+  variable_set('commerce_sync_rkeeper', TRUE);
+
+//  Create VOCABULARY
+  $vocabul = RKEEPER_VOCABULARY_NAME;
+  $vocabulary = new stdClass();
+  $vocabulary->name = t('Меню');
+  $vocabulary->machine_name = $vocabul;
+  $vocabulary->description = t('Меню для rkeepera');
+  taxonomy_vocabulary_save($vocabulary);
+
+
+//  Create Product Type
+  $menu = 'menuitems';
+//  menuitems
+  $product_type = array(
+    'type' => $menu,
+    'name' => 'Меню r-keeper',
+    'description' => t('Товары добавленные с r-keeper'),
+    'revision' => 1,
+    'help' => '',
+    'is_new' => TRUE,
+  );
+  commerce_product_ui_product_type_save($product_type);
+  $tables = 'tables';
+//  tables
+  $product_type = array(
+    'type' => $tables,
+    'name' => 'Столики r-keeper',
+    'description' => t('Столики добавленные с r-keeper'),
+    'revision' => 1,
+    'help' => '',
+    'is_new' => TRUE,
+  );
+  commerce_product_ui_product_type_save($product_type);
+
+//  Create Node_Type node_menu
+  $type = array(
+    'type' => RKEEPER_NODE_TYPE,
+    'name' => st('Продукт дисплей'),
+    'base' => 'node_content',
+    'description' => st('Меню для суши бара токио'),
+    'custom' => 1,
+    'modified' => 1,
+    'locked' => 0,
+  );
+  $type = node_type_set_defaults($type);
+  node_type_save($type);
+
+//  Create fields
+  $field = array();
+
+//  user
+  $field = array();
+  $field['rk_card'] = array(
+    'label' => 'Карта',
+    'required' => 0,
+    'type' => 'text',
+    'description' => t('Укажите ваш номер карты выданные в суши баре Токио'),
+    'settings' => array(
+      'max_length' => 20,
+    ),
+    'entity_type' => 'user',
+    'bundle' => 'user',
+    'widget_type' => 'text_textfield',
+  );
+
+//  node_type
+  $field['rk_kategori'] = array(
+    'label' => 'Категория',
+    'type' => 'taxonomy_term_reference',
+    'settings' => array(
+      'allowed_values' => array(
+        array(
+          'vocabulary' => 'menu',
+        ),
+      ),
+    ),
+    'entity_type' => 'node',
+    'bundle' => RKEEPER_NODE_TYPE,
+    'widget_type' => 'taxonomy_autocomplete',
+  );
+  $field['rk_product'] = array(
+    'label' => 'Товар',
+    'type' => 'commerce_product_reference',
+    'cardinality' => array(
+      'options' => -1,
+    ),
+    'entity_type' => 'node',
+    'bundle' => RKEEPER_NODE_TYPE,
+    'widget_type' => 'commerce_product_reference_autocomplete',
+    'settings_instance' => array(
+      'referenceable_types' => array(
+        'value' => 'menuitems',
+      ),
+    ),
+  );
+
+//  Product Type
+//  commerce_product - menuitems
+  $field['rk_portion_name'] = array(
+    'label' => 'Единицы измерения',
+    'type' => 'text',
+    'settings' => array(
+      'max_length' => 20,
+    ),
+    'entity_type' => 'commerce_product',
+    'bundle' => $menu,
+    'widget_type' => 'text_textfield',
+  );
+  $field['rk_portion_weight'] = array(
+    'label' => 'Вес порции',
+    'type' => 'number_float',
+    'settings' => array(
+      'decimal_separator' => '.',
+    ),
+    'entity_type' => 'commerce_product',
+    'bundle' => $menu,
+    'widget_type' => 'number',
+  );
+
+//  commerce_product - tables
+  $field['rk_maxguests'] = array(
+    'label' => 'Максимально мест',
+    'type' => 'list_integer',
+    'settings' => array(
+      'allowed_values' => array(
+        1 => 1,
+        2 => 2,
+        3 => 3,
+        4 => 4,
+        5 => 5,
+        6 => 6,
+      ),
+    ),
+    'entity_type' => 'commerce_product',
+    'bundle' => $tables,
+    'widget_type' => 'options_select',
+  );
+  $field['rk_hall'] = array(
+    'label' => 'Зал',
+    'type' => 'list_integer',
+    'settings' => array(
+      'allowed_values' => array(
+        1 => '№1',
+        2 => '№2',
+      ),
+    ),
+    'entity_type' => 'commerce_product',
+    'bundle' => $tables,
+    'widget_type' => 'options_buttons',
+  );
+
+//  Поля прикреплены к терминам и Product Type menu
+  $field['rk_image'] = array(
+    'label' => 'Изображение',
+    'required' => 0,
+    'type' => 'image',
+    'instance' => array(
+      1 => array(
+        'entity_type' => 'taxonomy_term',
+        'bundle' => $vocabul,
+      ),
+      2 => array(
+        'entity_type' => 'commerce_product',
+        'bundle' => $menu,
+      ),
+    ),
+    'widget_type' => 'image_image',
+  );
+//  Поля прикреплены к терминам и Product Type menu tables
+  $field['rk_code'] = array(
+    'label' => 'Код',
+    'type' => 'number_integer',
+    'settings' => array(
+      'allowed_values' => array(
+        'min' => 1,
+      ),
+    ),
+    'instance' => array(
+      1 => array(
+        'entity_type' => 'taxonomy_term',
+        'bundle' => $vocabul,
+        'widget_type' => 'number',
+      ),
+      2 => array(
+        'entity_type' => 'commerce_product',
+        'bundle' => $menu,
+        'widget_type' => 'number',
+      ),
+      3 => array(
+        'entity_type' => 'commerce_product',
+        'bundle' => $tables,
+        'widget_type' => 'number',
+      ),
+    ),
+  );
+
+//  Поля прикреплены к терминам
+  $field['rk_status'] = array(
+    'label' => 'Статус',
+    'type' => 'list_boolean',
+    'settings' => array(
+      'allowed_values' => array(
+        0 => 'Выключить',
+        1 => 'Включить',
+      ),
+    ),
+    'entity_type' => 'taxonomy_term',
+    'bundle' => $vocabul,
+    'widget_type' => 'options_buttons',
+  );
+
+  field_create_and_instance($field);
+}
+
+//  Создание и прикрепление полей
+//  Шаблон массива для обработки
+//  $field = array();
+//  $field['field_name'] = array(
+//    'label' => '',
+//    'type' => '',
+//    'required' => 1, //default=1
+//    'description' => '', //default=label
+//    'settings' => array( //default=array()
+//      'allowed_values' => array(
+//        1 => '№1',
+//        2 => '№2',
+//      ),
+//    ),
+//    'options_field' => array(), //Если есть дополнительные опции иначе удалить
+//     // Удалить 'instance' если прикрепить к 1 виду entity_type bundle
+//    'instance' => array(
+//      1 => array(
+//        'entity_type' => '',
+//        'bundle' => '',
+//        'label' => '',
+//        'widget_type' => '',
+//      ),
+//      2 => array(
+//        'entity_type' => '',
+//        'bundle' => '',
+//        'label' => '',
+//        'widget_type' => '',
+//      ),
+//    ),
+//    // Расскоментировать если прикрепить к 1 виду entity_type bundle
+//    //'entity_type' => '',
+//    //'bundle' => '',
+//    'widget_type' => '',
+//  );
+function field_create_and_instance($field = array()) {
+
+  foreach ($field as $key => $vall) {
+    $required = (isset($vall['required']) and !empty($vall['required'])) ? $vall['required'] : 1;
+    $field_name = field_info_field($key);
+    if ($field_name == NULL) {
+      $field = array(
+        'field_name' => $key,
+        'required' => $required,
+        'type' => $vall['type'],
+        'description' => (isset($vall['description']) and !empty($vall['description'])) ? t($vall['description']) : t($vall['label']),
+        'settings' => (isset($vall['settings']) and !empty($vall['settings'])) ? $vall['settings'] : array(),
+      );
+      if (isset($vall['options_field']) and !empty($vall['options_field'])) {
+        $field = array_merge($field, $vall['options_field']);
+      }
+      field_create_field($field);
+
+      if (isset($vall['instance']) and is_array($vall['instance'])){
+        foreach ($vall['instance'] as $key1 => $vall1) {
+          $instance = array(
+            'field_name' => $key,
+            'required' => $required,
+            'entity_type' => $vall1['entity_type'],
+            'bundle' => $vall1['bundle'],
+            'label' => (isset($vall1['label']) and !empty($vall1['label'])) ? t($vall1['label']) : t($vall['label']),
+            'widget' => array(
+              'type' => (isset($vall1['widget_type']) and !empty($vall1['widget_type'])) ? t($vall1['widget_type']) : t($vall['widget_type']),
+            ),
+          );
+          if (isset($vall1['settings_instance']) and !empty($vall1['settings_instance'])) {
+            $instance['settings'] = $vall1['settings_instance'];
+          }
+          if (isset($vall1['widget_instance']) and !empty($vall1['widget_instance'])) {
+            $instance['widget'] = $vall1['widget_instance'];
+          }
+          field_create_instance($instance);
+        }
+
+      } else {
+        $instance = array(
+          'field_name' => $key,
+          'required' => $required,
+          'entity_type' => $vall['entity_type'],
+          'bundle' => $vall['bundle'],
+          'label' => t($vall['label']),
+          'widget' => array(
+            'type' => $vall['widget_type'],
+          ),
+        );
+        if (isset($vall['settings_instance']) and !empty($vall['settings_instance'])) {
+          $instance['settings'] = $vall['settings_instance'];
+        }
+        if (isset($vall['widget_instance']) and !empty($vall['widget_instance'])) {
+          $instance['widget']['settings'] = $vall['widget_instance'];
+        }
+
+        field_create_instance($instance);
+      }
+    }
+  }
+}
+
+

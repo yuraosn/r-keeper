@@ -1,0 +1,31 @@
+<?php
+/**
+ * @file prepay_rkeeper.install
+ */
+
+/**
+ * Implements hook_install().
+ *
+ * Here we count on Commerce Line Items module to configure our type based on
+ * the information we provide in
+ * line_item_example_commerce_line_item_type_info().
+ */
+function prepay_rkeeper_install() {
+  // This function configures all existing line item types, including ours.
+  commerce_line_item_configure_line_item_types();
+  variable_set('prepay', FALSE);
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function prepay_rkeeper_uninstall() {
+  $variables = array(
+    'order_amount_total',
+    'order_amount_prepay',
+    'prepay',
+  );
+  foreach ($variables as $variable) {
+    variable_del($variable);
+  }
+}

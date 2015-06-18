@@ -1,0 +1,29 @@
+<?php
+/**
+ * @file card_rkeeper.module
+ *
+ */
+
+/**
+ *  Implements hook_commerce_cart_order_refresh().
+ *  Добавление карты клиента на странице checkout
+ */
+function card_rkeeper_commerce_cart_order_refresh($order_wrapper){
+  $order = $order_wrapper->value();
+  if(user_is_logged_in()) {
+    $user = $GLOBALS['user'];
+    $user = user_load($user->uid);
+    $user_card_num = (isset($user->rk_card['und'][0]['value']) and !empty($user->rk_card['und'][0]['value']))? $user->rk_card['und'][0]['value']: FALSE;
+
+    if($user_card_num) {
+      $order = commerce_order_load($order->order_number);
+      $commerce_coupon = commerce_coupon_load_by_code($user_card_num);
+      $commerce_coupon_id  = $commerce_coupon->coupon_id;
+      $order_card_id = isset($order->commerce_coupon_order_reference['und'][0]['target_id'])? $order->commerce_coupon_order_reference['und'][0]['target_id']: 0;
+
+      if($commerce_coupon_id != $order_card_id) {
+        commerce_coupon_redeem_coupon($commerce_coupon, $order);
+      }
+    }
+  }
+}

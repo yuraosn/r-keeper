@@ -1,0 +1,67 @@
+<?php
+/**
+ * @file tables_rkeeper.module
+ */
+
+/**
+ * Implements hook_commerce_checkout_page_info().
+ */
+function tables_rkeeper_commerce_checkout_page_info() {
+  $pages['tables_rkeeper_page'] = array(
+    'name' => t('Страница выбора столиков'),
+    'title' => t('Страница выбора столиков'),
+    'help' => t('Эта страница предоставляет вам выбрать столики для резервирования в нашем суши-баре'),
+    'weight' => 10,
+    'status_cart' => TRUE,
+    'buttons' => TRUE,
+    'submit_value' => t('Продолжить оформление заказа'),
+    'back_value' => t('Go back'),
+  );
+
+  return $pages;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ * Блокируем редактирование полей в billing
+ */
+function tables_rkeeper_form_commerce_checkout_form_checkout_alter(&$form, &$form_state, $form_id) {
+  $form['customer_profile_billing']['rk_hall']['#disabled'] = TRUE;
+  $form['customer_profile_billing']['field_rk_tables']['#disabled'] = TRUE;
+  $form['customer_profile_billing']['field_rk_prepay']['#disabled'] = TRUE;
+  $form['customer_profile_billing']['field_rk_order']['#disabled'] = TRUE;
+}
+
+/**
+ * Implements hook_commerce_checkout_page_info_alter().
+ */
+function tables_rkeeper_commerce_checkout_page_info_alter(&$pages) {
+  $my_weight = PHP_INT_MAX;
+
+  // Сделать первой страницей в заказе
+  foreach ($pages as $index => $page) {
+    if ($index != 'tables_rkeeper_page' && $page['weight'] < $my_weight) {
+      $my_weight = $page['weight'] - 1;
+    }
+  }
+  $pages['tables_rkeeper_page']['weight'] = $my_weight;
+}
+
+/**
+ * Implements hook_commerce_checkout_pane_info().
+ */
+function tables_rkeeper_commerce_checkout_pane_info() {
+  $panes['tables_rkeeper_pane'] = array(
+    'title' => t('Выбор столиков'),
+    'base' => 'tables_rkeeper',
+    'page' => 'tables_rkeeper_page',
+    'weight' => -1,
+    'file' => 'includes/pane.inc',
+    'locked' => FALSE,
+  );
+
+  return $panes;
+}
+
+
+

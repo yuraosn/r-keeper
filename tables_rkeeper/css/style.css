@@ -1,0 +1,25 @@
+.page-node #footer-wrapper {
+    display: none;
+}
+
+.rk-product .field-content div img {
+    float: left;
+}
+.rk-product .field-content div div {
+    float: left;
+    margin-left: 14px;
+}
+.view-id-menu .views-view-grid.cols-3 td.col-1.col-first, td.col-2.col-last {
+    text-align: center;
+    width: 210px;
+}
+.field-name-commerce-order-total .commerce-price-formatted-components {
+    width: 66%;
+    margin-left: auto;
+}
+.view-id-menu table {
+    width: 0;
+}
+.commerce-order-handler-area-order-total .commerce-price-formatted-components {
+  width: 67%;
+}

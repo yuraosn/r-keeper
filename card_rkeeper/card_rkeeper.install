@@ -1,0 +1,16 @@
+<?php
+/**
+ * @file card_rkeeper.install
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function card_rkeeper_uninstall() {
+  $variables = array(
+    'commerce_kard_en',
+  );
+  foreach ($variables as $variable) {
+    variable_del($variable);
+  }
+}

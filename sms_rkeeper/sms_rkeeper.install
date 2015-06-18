@@ -1,0 +1,17 @@
+<?php
+/**
+ * @file sms_rkeeper.install
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function sms_rkeeper_uninstall() {
+  $variables = array(
+    'sms_rkeeper_settings',
+    'sms_rkeeper_active',
+  );
+  foreach ($variables as $variable) {
+    variable_del($variable);
+  }
+}
