@@ -25,14 +25,6 @@ function commerce_rkeeper_menu() {
     'type' => MENU_DEFAULT_LOCAL_TASK,
   );
 
-  $items['commerce'] = array(
-    'title' => 'Тест R-keeper',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('test_commerce'),
-    'access arguments' => array('administer r-keeper'),
-    'type' => MENU_NORMAL_ITEM,
-  );
-
   return $items;
 }
 
